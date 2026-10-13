@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Random Ussless Imaje-s — Gallery</title>
+  <style>
+    :root { --bg: #0f172a; --panel: rgba(255,255,255,0.03); --muted: #9fb6d8; --accent: #7c5cff; }
+    body { background: var(--bg); color: #e6eef6; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; margin: 0; padding: 0; }
+    .app { display: flex; height: 100vh; }
+    .sidebar { width: 260px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding: 16px; box-sizing: border-box; border-right: 1px solid rgba(255,255,255,0.02); }
+    .logo { font-weight: 700; margin-bottom: 12px; }
+    .note { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+    .cats { margin-top: 12px; }
+    .cat { padding: 8px 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: #e6eef6; }
+    .cat:hover { background: rgba(255,255,255,0.02); }
+    .cat.selected { background: rgba(124,92,255,0.12); }
+    .main { flex: 1; padding: 18px; box-sizing: border-box; overflow: auto; }
+    .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 18px; }
+    figure { background: var(--panel); padding: 12px; border-radius: 8px; margin: 0; position: relative; }
+    img { max-width: 100%; height: auto; display: block; border-radius: 6px; background: white; }
+    figcaption { font-size: 12px; color: var(--muted); margin-top: 8px; word-break: break-all; }
+    .small { font-size: 12px; color: var(--muted); }
+    button, input[type=text], select { background: rgba(255,255,255,0.02); color: #e6eef6; border: 1px solid rgba(255,255,255,0.03); padding: 8px 10px; border-radius: 6px; }
+    input[type=file] { color: #e6eef6; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .image-actions { display:flex; gap:8px; margin-top:8px; }
+    .danger { background: #7f1d1d; }
+    .muted { color: #9fb6d8; }
+    .footer { margin-top: 12px; color: #8aa0c2; font-size: 12px; }
+    .empty { color: var(--muted); padding: 24px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">Random Ussless Imaje-s</div>
+      <div class="note">Browse categories, upload images, and manage everything here.</div>
+
+      <div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <input id="new-cat-name" type="text" placeholder="New category" />
+          <button id="create-cat">Create</button>
+        </div>
+      </div>
+
+      <div class="cats" id="categories">
+        <!-- categories list injected here -->
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="small muted">Tips</div>
+        <div class="small muted">Select a category to filter. Upload lets you choose a category. Delete asks for confirmation.</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="controls">
+        <div class="row">
+          <input id="file-input" type="file" />
+          <select id="upload-cat"></select>
+          <button id="upload-btn">Upload</button>
+        </div>
+        <div style="margin-left:auto;" class="row">
+          <button id="refresh">Refresh</button>
+        </div>
+      </div>
+
+      <section id="gallery" class="grid">
+        <!-- images here -->
+      </section>
+
+      <div class="footer">Local viewer — close the terminal to stop the server.</div>
+    </main>
+  </div>
+
+<script>
+const api = path => '/api' + path;
+let categories = [];
+let images = [];
+let selected = 'all'; // 'all' or 'uncategorized' or category name
+
+async function fetchJSON(url, opts) {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function loadCategories() {
+  try {
+    const data = await fetchJSON(api('/categories'));
+    categories = data.categories || [];
+    renderCategories();
+    populateUploadCats();
+  } catch (e) { console.error(e); }
+}
+
+function renderCategories(){
+  const el = document.getElementById('categories');
+  el.innerHTML = '';
+  const addRow = (id, label) => {
+    const d = document.createElement('div');
+    d.className = 'cat' + (selected===id? ' selected':'');
+    d.textContent = label;
+    d.onclick = () => { selected = id; renderCategories(); renderImages(); };
+    return d;
+  };
+  el.appendChild(addRow('all','All Images'));
+  el.appendChild(addRow('uncategorized','Uncategorized'));
+  categories.forEach(cat => {
+    const d = document.createElement('div');
+    d.className = 'cat' + (selected===cat? ' selected':'');
+
+    const name = document.createElement('span');
+    name.textContent = cat;
+    name.style.flex = '1';
+    name.onclick = () => { selected = cat; renderCategories(); renderImages(); };
+
+    const renameBtn = document.createElement('button');
+    renameBtn.textContent = '✎';
+    renameBtn.title = 'Rename';
+    renameBtn.onclick = async (e) => { e.stopPropagation();
+      const newName = prompt('Rename category', cat);
+      if (newName && newName.trim() && newName !== cat) {
+        await fetchJSON(api('/categories/' + encodeURIComponent(cat)), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name:newName.trim()})});
+        await loadCategories(); await loadImages();
+      }
+    };
+
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '🗑'; delBtn.title='Delete';
+    delBtn.onclick = async (e) => { e.stopPropagation();
+      if (!confirm('Delete category "' + cat + '"? Images will be uncategorized.')) return;
+      await fetchJSON(api('/categories/' + encodeURIComponent(cat)), {method:'DELETE'});
+      if (selected===cat) selected='all';
+      await loadCategories(); await loadImages();
+    };
+
+    d.appendChild(name);
+    d.appendChild(renameBtn);
+    d.appendChild(delBtn);
+
+    el.appendChild(d);
+  });
+}
+
+function populateUploadCats(){
+  const sel = document.getElementById('upload-cat');
+  sel.innerHTML='';
+  const makeOpt = (val, label) => { const o=document.createElement('option'); o.value=val; o.textContent=label; return o; };
+  sel.appendChild(makeOpt('', 'None'));
+  categories.forEach(c => sel.appendChild(makeOpt(c, c)));
+}
+
+async function loadImages(){
+  try{
+    images = await fetchJSON(api('/images'));
+    renderImages();
+  }catch(e){console.error(e);} 
+}
+
+function renderImages(){
+  const container = document.getElementById('gallery');
+  container.innerHTML = '';
+  let rows = images.slice();
+  if (selected === 'uncategorized') rows = rows.filter(i => !i.category);
+  else if (selected !== 'all') rows = rows.filter(i => i.category === selected);
+
+  if (rows.length === 0) { container.innerHTML = '<div class="empty">No images in this view.</div>'; return; }
+
+  rows.forEach(it => {
+    const fig = document.createElement('figure');
+    const img = document.createElement('img');
+    img.src = '/images/' + encodeURIComponent(it.filename);
+    img.alt = it.filename;
+
+    const cap = document.createElement('figcaption');
+    cap.textContent = it.filename;
+
+    const actions = document.createElement('div');
+    actions.className = 'image-actions';
+
+    const del = document.createElement('button');
+    del.textContent = 'Delete'; del.className='danger';
+    del.onclick = async () => {
+      if (!confirm('Delete image "' + it.filename + '"?')) return;
+      await fetchJSON(api('/images/' + encodeURIComponent(it.filename)), {method:'DELETE'});
+      await loadImages();
+    };
+
+    const moveSel = document.createElement('select');
+    const noneOpt = document.createElement('option'); noneOpt.value=''; noneOpt.textContent='None'; moveSel.appendChild(noneOpt);
+    categories.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; if (it.category===c) o.selected=true; moveSel.appendChild(o); });
+    moveSel.onchange = async () => {
+      await fetchJSON(api('/move'), {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({filename: it.filename, category: moveSel.value})});
+      await loadImages();
+    };
+
+    actions.appendChild(moveSel);
+    actions.appendChild(del);
+
+    fig.appendChild(img);
+    fig.appendChild(cap);
+    fig.appendChild(actions);
+
+    container.appendChild(fig);
+  });
+}
+
+// UI wiring
+document.getElementById('create-cat').onclick = async () => {
+  const name = document.getElementById('new-cat-name').value.trim();
+  if (!name) return alert('Name required');
+  await fetchJSON(api('/categories'), {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name})});
+  document.getElementById('new-cat-name').value='';
+  await loadCategories(); await loadImages();
+};
+
+document.getElementById('upload-btn').onclick = async () => {
+  const fileInput = document.getElementById('file-input');
+  if (!fileInput.files || fileInput.files.length===0) return alert('Select a file');
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  fd.append('category', document.getElementById('upload-cat').value || '');
+  const res = await fetch(api('/upload'), {method:'POST', body: fd});
+  if (!res.ok) { alert(await res.text()); return; }
+  await loadImages(); fileInput.value='';
+};
+
+document.getElementById('refresh').onclick = async () => { await loadCategories(); await loadImages(); };
+
+// initial load
+loadCategories(); loadImages();
+</script>
+</body>
+</html>
