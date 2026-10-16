@@ -1,38 +1,23 @@
-# Random Ussless Imaje-s — Viewer & Manager
+# Random Ussless Imaje-s — Viewer
 
-This update adds a category and image management UI integrated with the existing local viewer.
+This repository includes a small, cross-platform image viewer that opens a local gallery showing the images in the `images/` folder.
 
-What's new
-- Full SPA at `gallery.html` with category creation/rename/delete, upload, delete images, and moving images between categories.
-- Backend API served by `app/viewer.py` (no external deps) providing endpoints under `/api/*`.
-- Persistent DB file `.gallery_db.json` stored in the repo root that keeps categories and image assignments across restarts.
-
-Files changed/added
-- app/viewer.py — replaced previous static-only server with API-backed server
-- gallery.html — new single-page app (keeps the dark theme and gallery design)
-- .gallery_db.json — persistent DB (auto-created)
-- app/run_viewer.sh and app/run_viewer.bat unchanged — continue to launch app/viewer.py
+Files:
+- app/viewer.py — Python 3 script that starts a local HTTP server and writes a simple gallery.html
+- app/run_viewer.sh — Unix launcher (make executable with `chmod +x app/run_viewer.sh`)
+- app/run_viewer.bat — Windows launcher
 
 How to run
 
-1. Clone the repo (if you haven't already):
+- Linux / macOS:
+  - Ensure Python 3 is installed
+  - From the repository root run: ./app/run_viewer.sh
 
-   git clone https://github.com/UnnownTShox/random-ussless-imaje-s.git
-   cd random-ussless-imaje-s
+- Windows:
+  - Ensure Python is installed and on PATH
+  - From the repository root run: app\\run_viewer.bat
 
-2. Run viewer (Python 3.8+ recommended):
+Notes
 
-   # Linux / macOS
-   ./app/run_viewer.sh
-
-   # Windows
-   app\\run_viewer.bat
-
-3. The viewer will open your browser to the gallery page. Use the sidebar to create categories; use the uploader to add images and choose a category. Use the image controls to delete or move images.
-
-Safety & validation
-- Uploads are restricted by extension and maximum size (10 MB).
-- Filenames are sanitized and collisions avoided by adding a -N suffix.
-- Deleting images only affects files inside the `images/` directory; path traversal is prevented.
-
-If you want a native executable or auto-reload when new images are added to disk, I can add those next. Enjoy the new manager!
+- The viewer generates a `gallery.html` file in the repository root (it will be overwritten each run). The program starts a tiny local HTTP server and opens your default browser to view the gallery.
+- This avoids external dependencies and works on Python 3.6+.
